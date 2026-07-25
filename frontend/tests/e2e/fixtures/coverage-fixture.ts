@@ -20,7 +20,7 @@ const COVERAGE_DIR = path.resolve(process.cwd(), 'coverage/e2e-raw');
  * Normalize file paths to work correctly with nyc
  * Converts absolute URLs to relative paths from project root
  */
-function normalizeFilePath(url: string): string {
+export function normalizeFilePath(url: string): string {
   try {
     const urlObj = new URL(url);
     let pathname = urlObj.pathname;
@@ -48,6 +48,12 @@ function normalizeFilePath(url: string): string {
       return '';
     }
 
+    // Handle Vite asset URLs such as /assets/index-abc.js by keeping the relative asset path.
+    if (filePath.startsWith('assets/')) {
+      return filePath;
+    }
+
+    // Prefer the repository-relative path when it exists in the checked-out source tree.
     const localSrc = path.resolve(process.cwd(), filePath);
     if (fs.existsSync(localSrc) && localSrc.startsWith(process.cwd())) {
       return path.relative(process.cwd(), localSrc);
@@ -157,7 +163,9 @@ export const test = base.extend<{ coverageEnabled: void }>({
           processedUrls.add(entry.url);
 
           try {
-            // Normalize the file path for nyc compatibility
+            // Normalize the file path for nyc compatibility.
+            // We intentionally keep relative asset paths (e.g. assets/index-*.js)
+            // so that nyc can report them even when the source is served from Vite.
             const normalizedPath = normalizeFilePath(entry.url);
             console.log(`  Normalized path: ${normalizedPath}`);
             
