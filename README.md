@@ -1,710 +1,168 @@
-# 📱 Test App
+# Test App
 
-> Spring Boot + Vue.js + Playwright による E2E テスト自動化アプリケーション
+Spring Boot + Vue 3 + MySQL + Moto を使った簡易 Web アプリケーションです。  
+ローカル開発用の認証、メモ管理、ToDo 管理、E2E テスト自動化をまとめて扱える構成になっています。
 
-[![E2E Tests](https://github.com/cocomomojo/test_app/actions/workflows/e2e.yml/badge.svg)](https://github.com/cocomomojo/test_app/actions/workflows/e2e.yml)
-[![Allure Report](https://img.shields.io/badge/Allure_Report-Live-green)](https://cocomomojo.github.io/test_app/allure/)
-[![Coverage Report](https://img.shields.io/badge/Coverage_Report-Live-blue)](https://cocomomojo.github.io/test_app/coverage/)
+## 目次
 
----
----
-
-## 📋 目次
-
-- [📱 Test App](#-test-app)
-  - [📋 目次](#-目次)
-  - [🎯 プロジェクト概要](#-プロジェクト概要)
-  - [🏗️ システム構成](#️-システム構成)
-  - [🛠️ 技術スタック](#️-技術スタック)
-  - [📦 環境構築](#-環境構築)
-  - [🚀 ローカル実行](#-ローカル実行)
-  - [🧪 E2E テスト実行](#-e2e-テスト実行)
-  - [🔄 GitHub Actions（CI/CD）](#-github-actionscicd)
-  - [📊 GitHub Pages（Allure レポート）](#-github-pagesallure-レポート)  - [� Wiki ドキュメント](#-wiki-ドキュメント)
-  - [�🔒 セキュリティ](#-セキュリティ)
-  - [📚 参考資料](#-参考資料)
+- [プロジェクト概要](#プロジェクト概要)
+- [技術スタック](#技術スタック)
+- [ローカル開発環境](#ローカル開発環境)
+- [起動方法](#起動方法)
+- [テスト実行](#テスト実行)
+- [CI / GitHub Actions](#ci--github-actions)
+- [補足](#補足)
 
 ---
 
-## 🎯 プロジェクト概要
+## プロジェクト概要
 
-このプロジェクトは、以下の機能を提供するフルスタック Web アプリケーションです：
+このリポジトリは、以下を目的としたサンプル実装です。
 
-- ✅ ユーザー認証（ローカル開発用の簡易認証実装）
-- ✅ メモ管理（画像アップロード機能付き）
-- ✅ ToDo 管理
-- ✅ E2E テスト自動化（Playwright + Allure）
-- ✅ CI/CD パイプライン（GitHub Actions）
-- ✅ テストレポート自動公開（GitHub Pages）
+- バックエンド API の実装（Spring Boot）
+- フロントエンド UI の実装（Vue 3 + Vite）
+- MySQL による永続化
+- AWS S3 相当のストレージを Moto でローカルエミュレーション
+- Playwright による E2E テスト
+- GitHub Actions による自動化
 
----
+主な機能としては、次のような画面と API を想定しています。
 
-## 🏗️ システム構成
-
-```mermaid
-graph TB
-    subgraph "🌐 ローカル開発環境"
-        FE[Frontend<br/>Vue.js + Vite<br/>Port: 5173]
-        BE[Backend<br/>Spring Boot<br/>Port: 8080]
-        DB[(MySQL<br/>Port: 3306)]
-        LS[LocalStack<br/>S3 Mock<br/>Port: 9000]
-    end
-
-    subgraph "🔄 CI環境 GitHub Actions"
-        FE_CI[Frontend<br/>Nginx<br/>Port: 8081]
-        BE_CI[Backend<br/>Spring Boot<br/>Port: 8080]
-        DB_CI[(MySQL<br/>Port: 3306)]
-        PW[Playwright<br/>E2E Tests]
-    end
-
-    subgraph "📊 成果物"
-        GHP[GitHub Pages<br/>Allure Report]
-    end
-
-    FE -->|API Request| BE
-    BE -->|Query| DB
-    BE -->|S3 API| LS
-
-    PW -->|Test| FE_CI
-    FE_CI -->|API| BE_CI
-    BE_CI -->|Query| DB_CI
-    PW -->|Generate| GHP
-
-    style FE fill:#61dafb
-    style BE fill:#6db33f
-    style DB fill:#4479a1
-    style GHP fill:#ff6b6b
-```
-
-### 📂 ディレクトリ構造
-
-```
-test_app/
-├── 📁 backend/              # Spring Boot バックエンド
-│   ├── src/
-│   │   └── main/
-│   │       ├── java/        # Java ソースコード
-│   │       └── resources/   # 設定ファイル
-│   ├── build.gradle         # Gradle 設定
-│   └── Dockerfile           # Docker イメージ定義
-│
-├── 📁 frontend/             # Vue.js フロントエンド
-│   ├── src/                 # Vue.js コンポーネント
-│   ├── tests/e2e/           # E2E テスト（Playwright）
-│   ├── package.json         # npm 依存関係
-│   ├── playwright.config.ts # Playwright 設定
-│   ├── nginx.conf           # Nginx 設定（本番用）
-│   └── Dockerfile           # Docker イメージ定義
-│
-├── 📁 infra/                # インフラ設定
-│   ├── docker-compose.local.yml  # ローカル開発用
-│   ├── docker-compose.ci.yml     # CI 環境用
-│   └── localstack/          # LocalStack 設定
-│
-└── 📁 .github/
-    └── workflows/
-        └── e2e.yml          # GitHub Actions ワークフロー
-```
+- ユーザー認証
+- メモ管理
+- ToDo 管理
 
 ---
 
-## 🛠️ 技術スタック
+## 技術スタック
 
 ### バックエンド
-| 技術 | バージョン | 用途 |
-|------|-----------|------|
-| ☕ Java | 17 | プログラミング言語 |
-| 🍃 Spring Boot | 3.5.9 | Web フレームワーク |
-| 🔐 Spring Security | 3.5.9 | 認証・認可 |
-| 💾 MySQL | 8.0 | データベース |
-| ☁️ AWS SDK | 2.25.60 | S3 連携 |
-| 📦 Gradle | - | ビルドツール |
+
+- Java 17
+- Spring Boot 3.5.9
+- Spring Security
+- Spring Data JPA
+- MySQL 8.0
+- AWS SDK for Java v2
+- Gradle
 
 ### フロントエンド
-| 技術 | バージョン | 用途 |
-|------|-----------|------|
-| 🖖 Vue.js | 3.3.4+ | UI フレームワーク |
-| ⚡ Vite | 5.0+ | ビルドツール |
-| 🎨 Vuetify | 3.3.0+ | UI コンポーネント |
-| 🎭 Playwright | 1.40.0+ | E2E テスト |
-| 📊 Allure | 2.13.9+ | テストレポート |
-| 🌐 Nginx | Alpine | Web サーバー（本番） |
+
+- Vue 3.5.13
+- Vite
+- Vuetify 3.8.5
+- Axios
+- Playwright 1.52.0
+- Allure 3.10.2
 
 ### インフラ
-| 技術 | 用途 |
-|------|------|
-| 🐳 Docker | コンテナ化 |
-| 🔧 Docker Compose | ローカル環境構築 |
-| 🔄 GitHub Actions | CI/CD パイプライン |
-| 📄 GitHub Pages | レポート公開 |
+
+- Docker
+- Docker Compose
+- GitHub Actions
+- Moto (S3 / AWS API エミュレーション)
+
+> 重要: 実装上の S3 エミュレーションは LocalStack ではなく Moto を使用しています。
 
 ---
 
-## 📦 環境構築
+## ローカル開発環境
 
-### 前提条件
+前提条件:
 
-以下のツールがインストールされていることを確認してください：
+- Docker
+- Docker Compose
+- Git
+- Node.js 20 系（推奨）
+- Java 17
 
-```mermaid
-graph LR
-    A[💻 開発環境] --> B[🐳 Docker]
-    A --> C[🐙 Git]
-    A --> D[📦 Node.js 18+]
-    A --> E[☕ Java 17+]
+---
 
-    style A fill:#e1f5fe
-    style B fill:#bbdefb
-    style C fill:#90caf9
-    style D fill:#64b5f6
-    style E fill:#42a5f5
-```
+## 起動方法
 
-| ツール | 必須/推奨 | バージョン | 確認コマンド |
-|--------|----------|-----------|-------------|
-| 🐳 Docker | 必須 | 20.10+ | `docker --version` |
-| 🔧 Docker Compose | 必須 | 2.0+ | `docker compose version` |
-| 🐙 Git | 必須 | 2.30+ | `git --version` |
-| 📦 Node.js | 推奨 | 18+ | `node --version` |
-| ☕ Java | 推奨 | 17+ | `java --version` |
-
-### 🔽 リポジトリのクローン
+### 1. リポジトリをクローン
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/cocomomojo/test_app.git
+git clone https://github.com/kamn-sap/test_app.git
 cd test_app
 ```
 
----
-
-## 🚀 ローカル実行
-
-### 🐳 Docker Compose を使用（推奨）
-
-最も簡単な方法です。すべてのサービスが自動的に起動します。
-
-#### 1️⃣ サービスの起動
+### 2. Docker Compose で起動
 
 ```bash
 cd infra
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-**起動するサービス：**
-- ✅ MySQL（Port: 3306）
-- ✅ Spring Boot（Port: 8080）
-- ✅ Frontend（Vite dev server、Port: 5173）
-- ✅ LocalStack（S3 Mock、Port: 9000）
+起動対象:
 
-#### 2️⃣ 動作確認
+- MySQL: http://localhost:3306
+- Backend: http://localhost:8080
+- Frontend: http://localhost:5173
+- Moto: http://localhost:5000
+
+### 3. 動作確認
 
 ```bash
-# コンテナの状態確認
-docker compose -f docker-compose.local.yml ps
-
-# Backend の動作確認
 curl http://localhost:8080/actuator/health
-
-# Frontend にアクセス
-# ブラウザで http://localhost:5173 を開く
 ```
 
-#### 3️⃣ ログの確認
+ブラウザで `http://localhost:5173` を開いて利用します。
 
-```bash
-# すべてのサービスのログ
-docker compose -f docker-compose.local.yml logs
-
-# Backend のログ（直近 200 行）
-docker compose -f docker-compose.local.yml logs backend --tail=200
-
-# リアルタイムログ追跡
-docker compose -f docker-compose.local.yml logs -f backend
-```
-
-#### 4️⃣ サービスの停止
+### 4. 停止
 
 ```bash
 cd infra
 docker compose -f docker-compose.local.yml down
-
-# ボリュームも削除する場合
-docker compose -f docker-compose.local.yml down -v
 ```
 
 ---
 
-### 💻 Docker を使わない実行（開発者向け）
+## テスト実行
 
-#### Backend
-
-```bash
-cd backend
-
-# 開発モードで実行
-./gradlew bootRun
-
-# または JAR をビルドして実行
-./gradlew bootJar
-java -jar build/libs/*.jar --spring.profiles.active=local
-```
-
-**アクセス:** http://localhost:8080
-
-#### Frontend
+### E2E テスト
 
 ```bash
 cd frontend
-
-# 依存関係のインストール
 npm install
-
-# 開発サーバー起動
-npm run dev
+npx playwright test
 ```
 
-**アクセス:** http://localhost:5173
-
----
-
-### 🔍 コンテナのデバッグ
-
-```bash
-# 実行中のコンテナ一覧
-docker ps
-
-# コンテナに入る
-docker exec -it infra-backend-1 /bin/bash
-
-# コンテナのログ確認
-docker logs infra-backend-1
-
-# コンテナの再起動
-docker compose -f docker-compose.local.yml restart backend
-```
-
----
-
-## 🧪 E2E テスト実行
-
-### ローカルでのテスト実行
-
-```mermaid
-sequenceDiagram
-    participant Dev as 👨‍💻 開発者
-    participant PW as 🎭 Playwright
-    participant FE as ⚛️ Frontend
-    participant BE as 🍃 Backend
-    participant DB as 💾 MySQL
-
-    Dev->>PW: npm run test:e2e
-    PW->>FE: ブラウザでアクセス
-    FE->>BE: API リクエスト
-    BE->>DB: データ取得
-    DB-->>BE: レスポンス
-    BE-->>FE: JSON レスポンス
-    FE-->>PW: 画面描画
-    PW-->>Dev: テスト結果 + スクリーンショット
-```
-
-#### 1️⃣ 前提条件
-
-```bash
-# サービスが起動していることを確認
-cd infra
-docker compose -f docker-compose.local.yml up -d
-```
-
-#### 2️⃣ Playwright のインストール
+### ユニットテスト
 
 ```bash
 cd frontend
-
-# 依存関係のインストール
-npm install
-
-# Playwright ブラウザのインストール
-npm run setup:e2e
+npm run test:unit
 ```
 
-#### 2.5️⃣ 公式 Playwright Test Agents の初期化（初回 1 回）
-
-> planner / generator / healer を使う場合に必要です。
+### Allure レポート
 
 ```bash
-cd frontend
-
-# 公式 Playwright Test Agents を初期化
-npm run setup:agents
-```
-
-#### 3️⃣ テストの実行
-
-```bash
-cd frontend
-
-# すべてのテストを実行
-npx playwright test --project=chrome
-
-# 特定のテストファイルのみ実行
-npx playwright test tests/e2e/login.spec.ts --project=chrome
-
-# UI モードで実行（デバッグに便利）
-npx playwright test --ui
-
-# ヘッドフルモードで実行（ブラウザを表示）
-npx playwright test --project=chrome --headed
-```
-
-#### 4️⃣ テストレポートの確認
-
-```bash
-# Allure レポートの生成
 cd frontend
 npx allure generate allure-results --clean -o allure-report
-
-# レポートを開く
 npx allure open allure-report
-
-# HTML レポートを開く（Playwright 標準）
-npx playwright show-report
 ```
-
-### 📝 テストファイル
-
-| ファイル | テスト内容 |
-|---------|----------|
-| `login.spec.ts` | 🔐 ログイン機能 |
-| `memo.spec.ts` | 📝 メモ管理機能 |
-| `todo.spec.ts` | ✅ ToDo 管理機能 |
-| `navigation.spec.ts` | 🧭 ページナビゲーション |
 
 ---
 
-## 🔄 GitHub Actions（CI/CD）
+## CI / GitHub Actions
 
-### ⚠️ ワークフロー実行方式
+このリポジトリでは GitHub Actions で E2E テストを実行する構成を採用しています。
 
-**現在の設定：手動実行のみ**
-
-- ❌ main ブランチへの push では自動実行されません
-- ❌ Pull Request 作成時も自動実行されません
-- ✅ GitHub Actions から手動実行のみ可能
-
-### ワークフローの概要
-
-```mermaid
-graph TD
-    A[🖱️ 手動実行] --> B[🏗️ Docker Build]
-
-    B --> C[⏳ サービス起動待機]
-    C --> D{✅ ヘルスチェック}
-    D -->|❌ 失敗| E[📋 ログ出力]
-    D -->|✅ 成功| F[🎭 E2E テスト実行]
-
-    F -->|❌ 失敗| G[📸 スクリーンショット保存]
-    F -->|✅ 成功| H[📊 Allure レポート生成]
-
-    H --> I{🔍 main ブランチ?}
-    I -->|Yes| J[🚀 GitHub Pages デプロイ]
-    I -->|No| K[📦 Artifact 保存]
-
-    J --> L[✨ 完了]
-    K --> L
-    G --> L
-    E --> L
-
-    style A fill:#e3f2fd
-    style F fill:#fff3e0
-    style J fill:#e8f5e9
-    style L fill:#f3e5f5
-```
-
-### 🎯 ワークフローの実行方法
-
-#### 手動実行（唯一の実行方法）
-
-1. GitHub リポジトリの **Actions** タブを開く
-2. 左側から **E2E Tests with Playwright and Allure** を選択
-3. 右上の **Run workflow** ボタンをクリック
-4. ブランチを選択
-   - **main** ブランチ: テスト成功時に GitHub Pages へデプロイ
-   - **その他のブランチ**: テストのみ実行（デプロイなし）
-5. **Run workflow** をクリック
-
-**実行権限:**
-- ✅ リポジトリオーナー
-- ✅ Collaborators（書き込み権限あり）
-- ❌ 一般の閲覧者は実行不可
-
-**実行結果の確認:**
-- Actions タブでワークフローの進行状況を確認
-- 各ステップの詳細ログを表示可能
-- テスト失敗時はスクリーンショットやビデオを Artifacts からダウンロード可能
-
-### 📊 ワークフローのステップ
-
-| ステップ | 所要時間 | 説明 |
-|---------|---------|------|
-| 1️⃣ Checkout | ~5秒 | コードの取得 |
-| 2️⃣ Docker Build | ~80秒 | コンテナイメージのビルド |
-| 3️⃣ Health Check | ~60秒 | サービスの起動確認 |
-| 4️⃣ Playwright Install | ~45秒 | ブラウザのインストール |
-| 5️⃣ E2E Tests | ~10秒 | テストの実行 |
-| 6️⃣ Allure Report | ~5秒 | レポート生成 |
-| 7️⃣ Deploy to Pages | ~5秒 | GitHub Pages へデプロイ |
-
-**合計:** 約 2-3 分
+- 実行方法: 手動実行（workflow から実行）
+- 主要対象: `.github/workflows/e2e.yml`
+- データの検証や自動化は実装に合わせて運用します
 
 ---
 
-## 📊 GitHub Pages（テストレポート・カバレッジ）
+## 補足
 
-### 🌐 公開 URL
-
-| レポート | URL |
-|---------|-----|
-| **📊 Allure レポート** | https://cocomomojo.github.io/test_app/allure/ |
-| **📈 カバレッジレポート** | https://cocomomojo.github.io/test_app/coverage/ |
-| **🏠 メインページ** | https://cocomomojo.github.io/test_app/ |
-
-### ⚙️ 初回セットアップ
-
-#### 1️⃣ GitHub Pages の設定
-
-```
-GitHub リポジトリ → Settings → Pages
-```
-
-| 設定項目 | 値 |
-|---------|---|
-| Source | Deploy from a branch |
-| Branch | gh-pages |
-| Folder | / (root) |
-
-#### 2️⃣ GitHub Actions の権限設定
-
-```
-GitHub リポジトリ → Settings → Actions → General
-```
-
-| 設定項目 | 値 |
-|---------|---|
-| Workflow permissions | Read and write permissions |
-
-#### 3️⃣ デプロイのトリガー
-
-```bash
-# main ブランチに push
-git push origin main
-
-# または GitHub Actions から手動実行
-```
-
-#### 4️⃣ 確認
-
-- ✅ Actions タブで「E2E Tests with Coverage」が成功
-- ✅ Settings → Pages で「Your site is live at」が表示
-- ✅ 1-2 分待ってから URL にアクセス
-
-### 🔍 トラブルシューティング
-
-#### 404 エラーが出る場合
-
-1. **Settings → Pages で Source を確認**
-   - ❌ GitHub Actions ← 間違い
-   - ✅ Deploy from a branch (gh-pages) ← 正しい
-
-2. **gh-pages ブランチの確認**
-   ```bash
-   git fetch origin
-   git checkout gh-pages
-   ls -la  # index.html が存在するか確認
-   ```
-
-3. **ブラウザキャッシュをクリア**
-   - Ctrl + Shift + R（Windows/Linux）
-   - Cmd + Shift + R（Mac）
+- 本リポジトリの S3 代替実装は LocalStack ではなく Moto です。
+- wiki には補助的な設計メモや運用メモが含まれますが、実装を最優先にしてください。
+- README は実装に沿ってメンテナンスされる前提です。
 
 ---
 
-## 🔒 セキュリティ
-
-### 🛡️ 実装済みのセキュリティ対策
-
-```mermaid
-graph LR
-    A[🔒 セキュリティ対策] --> B[🔑 権限制御]
-    A --> C[🚫 実行制限]
-    A --> D[⏱️ タイムアウト]
-
-    B --> B1[書き込み権限あり]
-    B --> B2[手動実行のみ]
-
-    C --> C1[手動実行のみ許可]
-    C --> C2[main ブランチのみデプロイ]
-
-    D --> D1[30分で強制終了]
-    D --> D2[リソース不正使用防止]
-
-    style A fill:#ffebee
-    style B fill:#fce4ec
-    style C fill:#f3e5f5
-    style D fill:#ede7f6
-```
-
-### セキュリティマトリックス
-
-| リスク | 対策 | 状態 |
-|--------|------|:----:|
-| 自動実行によるリソース消費 | 手動実行のみ許可 | ✅ |
-| 不正なコードの自動実行 | push/PR での自動実行を無効化 | ✅ |
-| 不正なデプロイ | main ブランチのみデプロイ | ✅ |
-| リソースの不正使用 | タイムアウト設定（30分） | ✅ |
-| 権限のない第三者による実行 | 書き込み権限必須 | ✅ |
-
-### 推奨設定（GitHub Settings）
-
-#### Branch Protection Rules（オプション）
-
-```
-Settings → Branches → Add rule
-Branch name pattern: main
-```
-
-- ✅ Require a pull request before merging
-- ✅ Require approvals (1)
-- ✅ Require branches to be up to date before merging
-
-**注意:** 手動実行のみの設定のため、ステータスチェックは不要
-
-#### Actions 権限設定
-
-```
-Settings → Actions → General
-```
-
-- ✅ Allow select actions and reusable workflows
-- ✅ Allow actions created by GitHub
-- ✅ Require approval for first-time contributors
-
----
-
-
-### 🤖 AI修正PR自動化フロー（Pilot）
-
-Issue #35 の検証で、`frontend-ui-text` × `low|medium` を対象に **Issue から Draft PR 作成まで** の自動化が確認できました。
-
-```mermaid
-flowchart LR
-    A[Error Analysis<br/>Issue] --> B[issue-to-triage.yml]
-    B --> C[issue-to-fix-brief.yml]
-    C --> D{pilot eligible}
-    D -->|yes| E[issue-to-auto-fix-pr.yml]
-    E --> F[Copilot fix<br/>+ validation]
-    F --> G[Draft PR]
-    D -->|no| H[Human review<br/>path]
-```
-
-現在の pilot 条件:
-
-- bug pattern: `frontend-ui-text`
-- severity: `low`, `medium`
-- PR 作成には repository secret `AUTO_FIX_GITHUB_TOKEN` が必要
-
----
-
-## �📚 Wiki ドキュメント
-
-本プロジェクトの詳細なドキュメントは [wiki/](./wiki/) ディレクトリに格納されています。
-
-以下のドキュメントを参照してください：
-
-| ドキュメント | 説明 |
-|-----------|------|
-| [00-目次](./wiki/00-目次.md) | ドキュメント全体の目次 |
-| [01-概要](./wiki/01-概要.md) | プロジェクトの概要と技術スタック |
-| [02-クイックスタート](./wiki/02-クイックスタート.md) | セットアップと起動方法 |
-| [03-アーキテクチャ](./wiki/03-アーキテクチャ.md) | システムアーキテクチャの詳細 |
-| [04-リポジトリ構造](./wiki/04-リポジトリ構造.md) | ディレクトリ構成と各コンポーネント |
-| [05-データモデル](./wiki/05-データモデル.md) | データベーススキーマと ER 図 |
-| [06-コアコンポーネント](./wiki/06-コアコンポーネント.md) | バックエンド各層の実装詳細 |
-| [07-APIドキュメント](./wiki/07-APIドキュメント.md) | API エンドポイント仕様 |
-| [08-テスト戦略](./wiki/08-テスト戦略.md) | E2E テスト設計とテスト実行方法 |
-| [09-デプロイメント](./wiki/09-デプロイメント.md) | 本番環境へのデプロイ手順 |
-| [10-コントリビューションガイド](./wiki/10-コントリビューションガイド.md) | 開発者向けガイドライン |
-| [11-まとめ](./wiki/11-まとめ.md) | プロジェクト全体のまとめ |
-
-### 🔄 ドキュメント生成
-
-このプロジェクトのドキュメントは、以下の方法で生成されています：
-
-- **生成ツール**: deepwiki
-- **参考サイト**: [deepwiki を試す](https://qiita.com/a32-suzuki/items/c3540da3e009dab1bf97)
-- **生成指示**: [生成指示書/ドキュメント指示書.md](./生成指示書/ドキュメント指示書.md)
-- **ドキュメント構成**: [生成指示書/ドキュメント構成.md](./生成指示書/ドキュメント構成.md)
-
----
-
-## 📚 参考資料
-
-### 📖 公式ドキュメント
-
-| 技術 | URL |
-|------|-----|
-| Spring Boot | https://spring.io/projects/spring-boot |
-| React | https://react.dev/ |
-| Playwright | https://playwright.dev/ |
-| Allure | https://docs.qameta.io/allure/ |
-| GitHub Actions | https://docs.github.com/ja/actions |
-| GitHub Pages | https://docs.github.com/ja/pages |
-| Docker | https://docs.docker.com/ |
-
-### 🎓 チュートリアル
-
-- [Playwright 入門](https://playwright.dev/docs/intro)
-- [Allure レポートの使い方](https://docs.qameta.io/allure/)
-- [GitHub Actions ワークフロー構文](https://docs.github.com/ja/actions/using-workflows/workflow-syntax-for-github-actions)
-- [Spring Security 認証設定](https://spring.io/guides/gs/securing-web/)
-
-### 💡 トラブルシューティング
-
-| 問題 | 解決方法 |
-|------|---------|
-| Docker コンテナが起動しない | `docker compose logs` でログ確認 |
-| Backend に接続できない | `curl http://localhost:8080/actuator/health` で確認 |
-| E2E テストが失敗する | `--headed` オプションでブラウザを表示してデバッグ |
-| GitHub Pages が 404 | Settings → Pages で Source 設定を確認 |
-
----
-
-## 📝 注意事項
-
-### 🔴 LocalStack の制限
-
-Cognito をローカルで完全にエミュレートするには **LocalStack Pro（有料）** が必要です。
-
-**代替案:**
-1. LocalStack Pro を使用
-2. 実際の AWS Cognito を使用
-3. ローカル用の簡易ログイン実装（現在採用）
-
-### テストユーザー
-
-| ユーザー名 | パスワード | 用途 |
-|-----------|----------|------|
-| `testuser` | `Test1234!` | E2E テスト / ローカル開発 |
-
----
-
----
-
-## 📄 ライセンス
+## ライセンス
 
 このプロジェクトは MIT ライセンスの下で公開されています。
-
----
-
-**作成日:** 2025-12-30
-**最終更新:** 2025-12-30
