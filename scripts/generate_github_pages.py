@@ -78,7 +78,19 @@ li{padding:8px 0}
     with open('gh-pages/coverage/index.html', 'w') as f:
         f.write(coverage_html)
     print("✓ Coverage index.html created")
-    
+
+    # Create fallback pages for coverage subdirectories
+    fallback_frontend = os.path.join('gh-pages', 'coverage', 'frontend', 'index.html')
+    fallback_backend = os.path.join('gh-pages', 'coverage', 'backend', 'index.html')
+    if not os.path.exists(fallback_frontend):
+        with open(fallback_frontend, 'w') as f:
+            f.write('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>Frontend Coverage</title></head><body><h1>No frontend coverage report available</h1></body></html>')
+        print("⚠ Fallback frontend coverage placeholder created")
+    if not os.path.exists(fallback_backend):
+        with open(fallback_backend, 'w') as f:
+            f.write('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>Backend Coverage</title></head><body><h1>No backend coverage report available</h1></body></html>')
+        print("⚠ Fallback backend coverage placeholder created")
+
     # Verify
     if os.path.exists('gh-pages/coverage/index.html'):
         size = os.path.getsize('gh-pages/coverage/index.html')

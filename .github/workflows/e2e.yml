@@ -118,7 +118,7 @@ jobs:
           echo "Coverage directory contents:"
           ls -la coverage/e2e-raw/ 2>/dev/null | head -20 || echo "Directory is empty or missing"
           echo ""
-          
+
           if [ -d "coverage/e2e-raw" ] && [ "$(ls -A coverage/e2e-raw)" ]; then
             echo "✓ Found coverage files, generating report..."
             npm run coverage:report
@@ -127,6 +127,17 @@ jobs:
             mkdir -p coverage/e2e-report
             echo "<h1>No frontend coverage data available</h1>" > coverage/e2e-report/index.html
           fi
+
+          echo ""
+          echo "=== Coverage report verification ==="
+          if [ -f coverage/e2e-report/index.html ]; then
+            echo "✓ coverage/e2e-report/index.html exists ($(wc -c < coverage/e2e-report/index.html) bytes)"
+          else
+            echo "✗ Missing frontend coverage report: coverage/e2e-report/index.html"
+            exit 1
+          fi
+          echo "Files in coverage/e2e-report:"
+          find coverage/e2e-report -maxdepth 2 -type f | sort
 
       - name: Stop services and collect backend coverage
         if: always()
@@ -158,11 +169,13 @@ jobs:
             cp -r frontend/allure-report/. gh-pages/allure/
           else
             echo "⚠ No Allure report found, creating placeholder..."
+            mkdir -p gh-pages/allure
             echo "<h1>No Allure report available</h1>" > gh-pages/allure/index.html
           fi
 
           # Copy frontend coverage if available
-          if [ -d "frontend/coverage/e2e-report" ]; then
+          mkdir -p gh-pages/coverage/frontend
+          if [ -d "frontend/coverage/e2e-report" ] && [ "$(ls -A frontend/coverage/e2e-report)" ]; then
             echo "✓ Copying frontend coverage report..."
             cp -r frontend/coverage/e2e-report/. gh-pages/coverage/frontend/
           else
@@ -171,7 +184,8 @@ jobs:
           fi
 
           # Copy backend coverage if available
-          if [ -d "backend/build/reports/jacoco/jacocoE2EReport/html" ]; then
+          mkdir -p gh-pages/coverage/backend
+          if [ -d "backend/build/reports/jacoco/jacocoE2EReport/html" ] && [ "$(ls -A backend/build/reports/jacoco/jacocoE2EReport/html)" ]; then
             echo "✓ Copying backend coverage report..."
             cp -r backend/build/reports/jacoco/jacocoE2EReport/html/. gh-pages/coverage/backend/
           else
@@ -182,6 +196,9 @@ jobs:
           echo ""
           echo "=== DEBUG: Final gh-pages structure ==="
           echo "Total files in gh-pages: $(find gh-pages -type f | wc -l)"
+          echo ""
+          echo "=== DEBUG: gh-pages coverage/frontend contents ==="
+          find gh-pages/coverage/frontend -maxdepth 2 -type f | sort
           echo ""
           echo "=== CRITICAL FILES CHECK ==="
           for file in "gh-pages/coverage/index.html" "gh-pages/coverage/frontend/index.html" "gh-pages/coverage/backend/index.html"; do

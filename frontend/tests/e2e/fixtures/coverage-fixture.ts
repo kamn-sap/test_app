@@ -16,38 +16,162 @@ import v8ToIstanbul from 'v8-to-istanbul';
 
 const COVERAGE_DIR = path.resolve(process.cwd(), 'coverage/e2e-raw');
 
+function writeCoverageFinalFile(coverageMap: Record<string, any>): void {
+  const finalPath = path.join(COVERAGE_DIR, 'coverage-final.json');
+  fs.mkdirSync(COVERAGE_DIR, { recursive: true });
+  fs.writeFileSync(finalPath, JSON.stringify(coverageMap, null, 2));
+}
+
+export function mergeCoverageData(currentCoverage: Record<string, any>, nextCoverage: Record<string, any>): Record<string, any> {
+  const mergedCoverage: Record<string, any> = { ...currentCoverage };
+
+  for (const [filePath, nextEntry] of Object.entries(nextCoverage)) {
+    const currentEntry = mergedCoverage[filePath];
+    if (!currentEntry) {
+      mergedCoverage[filePath] = nextEntry;
+      continue;
+    }
+
+    mergedCoverage[filePath] = {
+      ...currentEntry,
+      ...nextEntry,
+      path: currentEntry.path || nextEntry.path,
+      statementMap: {
+        ...(currentEntry.statementMap || {}),
+        ...(nextEntry.statementMap || {}),
+      },
+      fnMap: {
+        ...(currentEntry.fnMap || {}),
+        ...(nextEntry.fnMap || {}),
+      },
+      branchMap: {
+        ...(currentEntry.branchMap || {}),
+        ...(nextEntry.branchMap || {}),
+      },
+      s: {
+        ...(currentEntry.s || {}),
+        ...(nextEntry.s || {}),
+      },
+      f: {
+        ...(currentEntry.f || {}),
+        ...(nextEntry.f || {}),
+      },
+      b: {
+        ...(currentEntry.b || {}),
+        ...(nextEntry.b || {}),
+      },
+    };
+
+    for (const [key, value] of Object.entries(nextEntry.s || {})) {
+      if ((currentEntry.s || {})[key] === 1 || value === 1) {
+        mergedCoverage[filePath].s[key] = 1;
+      }
+    }
+  }
+
+  return mergedCoverage;
+}
+
 /**
  * Normalize file paths to work correctly with nyc
  * Converts absolute URLs to relative paths from project root
  */
-function normalizeFilePath(url: string): string {
+export function normalizeFilePath(url: string): string {
   try {
     const urlObj = new URL(url);
     let pathname = urlObj.pathname;
-    
+
     // Remove port number if present (e.g., :8081)
-    pathname = pathname.replace(/:\d+/, '');
-    
-    // Handle different URL patterns
+    pathname = pathname.replace(/:\d+$/, '');
+
+    // Handle Vite /@fs/ and /@id/ prefixes for source files.
     if (pathname.includes('/@fs/')) {
-      // Vite /@fs/ prefix for absolute paths
       pathname = pathname.replace('/@fs/', '');
-    } else if (pathname.startsWith('/src/')) {
-      // Already in correct format
-    } else if (pathname.includes('/node_modules/')) {
-      // Skip node_modules
-      return '';
-    } else {
-      // Assume it's a relative path from src
-      if (!pathname.startsWith('/src/') && pathname !== '/') {
-        pathname = `/src${pathname}`;
-      }
+    } else if (pathname.includes('/@id/')) {
+      pathname = pathname.replace('/@id/', '');
     }
-    
+
+    // Keep Vite-built asset URLs as relative paths so nyc can report them.
+    if (pathname.startsWith('/assets/')) {
+      return pathname.slice(1);
+    }
+
+    // Ignore node_modules and Vite internal runtime files.
+    if (pathname.includes('/node_modules/') || pathname.startsWith('/@vite/')) {
+      return '';
+    }
+
+    // Convert source URLs to repository-relative paths.
+    if (pathname.startsWith('/src/')) {
+      return pathname.slice(1);
+    }
+
+    let filePath = pathname;
+    if (filePath.startsWith('/')) {
+      filePath = filePath.slice(1);
+    }
+
+    if (!filePath || filePath === '/') {
+      return '';
+    }
+
+    const localSrc = path.resolve(process.cwd(), filePath);
+    if (fs.existsSync(localSrc) && localSrc.startsWith(process.cwd())) {
+      return path.relative(process.cwd(), localSrc);
+    }
+
+    const distFile = path.resolve(process.cwd(), 'dist', filePath);
+    if (fs.existsSync(distFile)) {
+      return path.relative(process.cwd(), distFile);
+    }
+
+    const distSrc = path.resolve(process.cwd(), 'dist', `.${pathname}`);
+    if (fs.existsSync(distSrc)) {
+      return path.relative(process.cwd(), distSrc);
+    }
+
+    // Preserve the existing main-branch behavior for local app paths.
+    if (pathname !== '/' && !pathname.startsWith('/src/')) {
+      pathname = `/src${pathname}`;
+    }
+
     return pathname;
   } catch {
     return '';
   }
+}
+
+function loadCoverageSource(normalizedPath: string, entrySource = ''): { source: string; sourceMapPath?: string; sourceMap?: string } {
+  const absolutePath = path.resolve(process.cwd(), normalizedPath);
+  if (fs.existsSync(absolutePath)) {
+    const source = fs.readFileSync(absolutePath, 'utf-8');
+    const sourceMapPath = `${absolutePath}.map`;
+    if (fs.existsSync(sourceMapPath)) {
+      return {
+        source,
+        sourceMapPath,
+        sourceMap: fs.readFileSync(sourceMapPath, 'utf-8'),
+      };
+    }
+    return { source };
+  }
+
+  const distPath = path.resolve(process.cwd(), 'dist', normalizedPath);
+  if (fs.existsSync(distPath)) {
+    const source = fs.readFileSync(distPath, 'utf-8');
+    const sourceMapPath = `${distPath}.map`;
+    if (fs.existsSync(sourceMapPath)) {
+      return {
+        source,
+        sourceMapPath,
+        sourceMap: fs.readFileSync(sourceMapPath, 'utf-8'),
+      };
+    }
+    return { source };
+  }
+
+  // Fall back to the source embedded in the coverage entry when the asset is not present on disk.
+  return { source: entrySource };
 }
 
 export const test = base.extend<{ coverageEnabled: void }>({
@@ -66,10 +190,13 @@ export const test = base.extend<{ coverageEnabled: void }>({
         const coverage = await page.coverage.stopJSCoverage();
         console.log(`📊 Collected coverage from ${coverage.length} entries`);
 
+        fs.rmSync(COVERAGE_DIR, { recursive: true, force: true });
         fs.mkdirSync(COVERAGE_DIR, { recursive: true });
 
         let successCount = 0;
         const processedUrls = new Set<string>();
+        const processedPaths = new Set<string>();
+        let mergedCoverage: Record<string, any> = {};
 
         for (let idx = 0; idx < coverage.length; idx++) {
           const entry = coverage[idx];
@@ -93,13 +220,15 @@ export const test = base.extend<{ coverageEnabled: void }>({
 
           // Skip duplicate URLs
           if (processedUrls.has(entry.url)) {
-            console.log(`  ⊘ Skipped (duplicate)`);
+            console.log(`  ⊘ Skipped (duplicate URL)`);
             continue;
           }
           processedUrls.add(entry.url);
 
           try {
-            // Normalize the file path for nyc compatibility
+            // Normalize the file path for nyc compatibility.
+            // We intentionally keep relative asset paths (e.g. assets/index-*.js)
+            // so that nyc can report them even when the source is served from Vite.
             const normalizedPath = normalizeFilePath(entry.url);
             console.log(`  Normalized path: ${normalizedPath}`);
             
@@ -108,36 +237,43 @@ export const test = base.extend<{ coverageEnabled: void }>({
               continue;
             }
 
-            // Use the source from the coverage entry if available
-            const source = entry.source ?? '';
+            if (processedPaths.has(normalizedPath)) {
+              console.log(`  ⊘ Skipped (duplicate normalized path)`);
+              continue;
+            }
+            processedPaths.add(normalizedPath);
+
+            // Load the source from the file system or dist output, and source map if available.
+            // For Vite assets the source is sometimes only available in the coverage entry itself.
+            const { source, sourceMapPath, sourceMap } = loadCoverageSource(normalizedPath, entry.source ?? '');
             console.log(`  Source available: ${source.length > 0 ? 'YES' : 'NO'}`);
-            
-            // Create v8-to-istanbul converter with normalized URL
-            const converter = v8ToIstanbul(normalizedPath, 0, { source });
+            if (sourceMapPath) {
+              console.log(`  Source map found: ${sourceMapPath}`);
+            }
+
+            const converterOptions: any = { source };
+            if (sourceMapPath) {
+              converterOptions.sourceMapPath = sourceMapPath;
+            }
+            if (sourceMap) {
+              converterOptions.sourceMap = sourceMap;
+            }
+            const converter = v8ToIstanbul(normalizedPath, 0, converterOptions);
             await converter.load();
             converter.applyCoverage(entry.functions);
             const istanbulCoverage = converter.toIstanbul();
 
             console.log(`  Istanbul coverage keys: ${Object.keys(istanbulCoverage).length}`);
 
-            // Ensure the coverage object has the correct structure
-            const coverageData: { [key: string]: any } = {};
+            // Ensure the coverage object has the correct structure and merge it into the
+            // single nyc-compatible output file expected by `nyc report`.
+            mergedCoverage = mergeCoverageData(mergedCoverage, istanbulCoverage);
             for (const [filePath, coverageInfo] of Object.entries(istanbulCoverage)) {
-              // Keep the path as-is for now to see what's being generated
-              coverageData[filePath] = coverageInfo;
               console.log(`    → ${filePath}: ${JSON.stringify(coverageInfo).length} bytes`);
             }
 
-            // Generate unique filename
-            const timestamp = Date.now();
-            const hash = Math.random().toString(36).slice(2, 8);
-            const filename = path.join(COVERAGE_DIR, `coverage-${timestamp}-${hash}.json`);
-            
-            const fileContent = JSON.stringify(coverageData, null, 2);
-            fs.writeFileSync(filename, fileContent);
             successCount++;
-            
-            console.log(`  ✓ Coverage saved: ${path.basename(filename)} (${fileContent.length} bytes)`);
+            console.log(`  ✓ Coverage merged for report generation`);
           } catch (error) {
             // Log but don't fail - some files might not be convertible
             console.error(
@@ -147,16 +283,19 @@ export const test = base.extend<{ coverageEnabled: void }>({
           }
         }
 
-        console.log(`\n✅ Saved ${successCount} coverage files to ${COVERAGE_DIR}`);
-        
-        // Verify coverage files were created
+        if (successCount > 0) {
+          writeCoverageFinalFile(mergedCoverage);
+        }
+
+        console.log(`\n✅ Merged ${successCount} coverage entries into ${COVERAGE_DIR}`);
+
+        // Verify the nyc-compatible coverage output was created
         const files = fs.readdirSync(COVERAGE_DIR);
         console.log(`📁 Coverage directory now contains ${files.length} files`);
-        files.slice(0, 3).forEach((f) => {
+        files.forEach((f) => {
           const size = fs.statSync(path.join(COVERAGE_DIR, f)).size;
           console.log(`   - ${f} (${size} bytes)`);
         });
-        if (files.length > 3) console.log(`   ... and ${files.length - 3} more`);
       }
     },
     { auto: true },
